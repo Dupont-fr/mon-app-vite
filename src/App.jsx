@@ -1,118 +1,92 @@
-import { useState, useEffect } from 'react'
-import Filter from './components/Filter'
-import PersonForm from './components/PersonForm'
-import Persons from './components/Persons'
+import { useState } from 'react'
+import Note from './components/Note'
+import Footer from './components/Footer'
+import MessageNotification from './components/MessageNotification'
 
-import personService from './services/persons'
+import { useEffect } from 'react'
+import noteService from './service/note'
+import './index.css'
 
 const App = () => {
-  const [persons, setPersons] = useState([])
-  const [newName, setNewName] = useState('')
-  const [newNumber, setNewNumber] = useState('')
-  const [filter, setFilter] = useState('')
+  const [notes, setNotes] = useState([])
+  const [newNote, setNewNote] = useState('')
+  const [showAll, setShowAll] = useState(true)
+  const [errorMessage, setErrorMessage] = useState('some error happened...')
 
   useEffect(() => {
-    personService
-      .getAllPersons()
-      .then((initialPersons) => {
-        setPersons(initialPersons)
-      })
-      .catch((error) => console.error(error))
+    noteService.getAll().then((initialNotes) => {
+      setNotes(initialNotes)
+    })
   }, [])
 
-  const handleNameChange = (event) => {
-    setNewName(event.target.value)
-  }
-  const handleNumberChange = (event) => {
-    setNewNumber(event.target.value)
-  }
-  const handleFilterChange = (event) => {
-    setFilter(event.target.value)
+  const toggleImportanceOf = (id) => {
+    const note = notes.find((n) => n.id === id)
+    const changedNote = { ...note, important: !note.important }
+
+    noteService
+      .update(id, changedNote)
+      .then((returnedNote) => {
+        setNotes(notes.map((note) => (note.id !== id ? note : returnedNote)))
+      })
+      .catch((error) => {
+        setErrorMessage(
+          `Note "${note.content}" was already removed from server`
+        )
+        setTimeout(() => {
+          setErrorMessage(null)
+        }, 5000)
+        setNotes(notes.filter((n) => n.id !== id))
+      })
   }
 
-  const addPerson = (event) => {
+  const notesToShow = showAll
+    ? notes
+    : notes.filter((note) => note.important === true)
+
+  const addNote = (event) => {
     event.preventDefault()
 
-    const existingPerson = persons.find(
-      (person) => person.name.toLowerCase() === newName.toLowerCase()
-    )
-
-    if (existingPerson) {
-      if (
-        window.confirm(
-          `${newName} est déjà dans le répertoire. Voulez-vous remplacer l'ancien numéro ?`
-        )
-      ) {
-        const updatedPerson = { ...existingPerson, number: newNumber }
-
-        personService
-          .updatePerson(existingPerson.id, updatedPerson)
-          .then((returnedPerson) => {
-            setPersons(
-              persons.map((person) =>
-                person.id !== existingPerson.id ? person : returnedPerson
-              )
-            )
-            setNewName('')
-            setNewNumber('')
-          })
-          .catch((error) => console.error(error))
-
-        return // On arrête ici pour éviter l'ajout
-      }
+    const noteObject = {
+      content: newNote,
+      date: new Date().toISOString(),
+      important: Math.random() < 0.5,
     }
 
-    const newPerson = { name: newName, number: newNumber }
-    personService
-      .createPerson(newPerson)
-      .then((returnedPerson) => {
-        setPersons(persons.concat(returnedPerson))
-        setNewName('')
-        setNewNumber('')
-      })
-      .catch((error) => console.error(error))
+    noteService.create(noteObject).then((returnedNote) => {
+      setNotes(notes.concat(returnedNote))
+      setNewNote('')
+    })
   }
-
-  const deletePerson = (id) => {
-    const existingPerson = persons.find((person) => person.id === id)
-
-    if (existingPerson) {
-      if (window.confirm(`Delete ${existingPerson.name}?`)) {
-        personService
-          .deletePerson(id)
-          .then((returnedPerson) => {
-            setPersons(persons.filter((person) => person.id !== id))
-          })
-          .catch((error) => console.error(error))
-      }
-    }
-  }
-
-  const personsToShow = filter
-    ? persons.filter((person) =>
-        person.name.toLowerCase().includes(filter.toLowerCase())
-      )
-    : persons
 
   return (
     <div>
-      <h2>Phonebook</h2>
+      <h1>Notes</h1>
+      <MessageNotification message={errorMessage} />
+      <div>
+        <button onClick={() => setShowAll(!showAll)}>
+          show {showAll ? 'important' : 'all'}
+        </button>
+      </div>
 
-      <Filter value={filter} onChange={handleFilterChange} />
-
-      <h3>Add a new</h3>
-      <PersonForm
-        onSubmit={addPerson}
-        newName={newName}
-        handleNameChange={handleNameChange}
-        newNumber={newNumber}
-        handleNumberChange={handleNumberChange}
-      />
-
-      <h3>Numbers</h3>
-      <Persons persons={personsToShow} onPersonDelete={deletePerson} />
+      <ul>
+        {notesToShow.map((note) => (
+          <Note
+            key={note.id}
+            note={note}
+            toogleImportance={() => toggleImportanceOf(note.id)}
+          />
+        ))}
+      </ul>
+      <form onSubmit={addNote}>
+        <input
+          placeholder='a new note ...'
+          value={newNote}
+          onChange={(event) => setNewNote(event.target.value)}
+        />
+        <button type='submit'>save</button>
+      </form>
+      <Footer />
     </div>
   )
 }
-
 export default App
